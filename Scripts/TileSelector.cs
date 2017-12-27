@@ -23,7 +23,7 @@ public class TileSelector : MonoBehaviour {
 	public void Select() {
 		maped.SelectTile(id);
 		selected = true;
-		mat.SetColor("_Color", new Color(0.2f, 0.4f, 0.0f, 1.0f));
+		mat.SetColor("_Color", new Color(0.3f, 0.3f, 0.0f, 1.0f));
 	}
 
 	public void Unselect() {
@@ -31,6 +31,6 @@ public class TileSelector : MonoBehaviour {
 	}
 
 	public void Hover() {
-		if (!selected) mat.SetColor("_Color", new Color(0.3f, 0.15f, 0.0f, 1.0f));
+		if (!selected) mat.SetColor("_Color", new Color(0.0f, 0.15f, 0.2f, 1.0f));
 	}
 }
