@@ -12,12 +12,15 @@ public class HMapEditor : MonoBehaviour {
 	public int ymod;
 	public float newheight;
 
-	public Material textureMaterial;
+	public Texture2D texture;
 
+	Material textureMaterial;
+	Vector2 tileUvSize = new Vector2(1f, 1f);
 	List<List<GameObject>> tiles;
 
 	// Use this for initialization
 	void Start () {
+		SetupMaterial(texture, 4, 4);
 		NewMap(nwidth, nheight, nsize, textureMaterial);
 		SetVertexHeight(xmod, ymod, newheight);
 		FlipTriangles(0, 0);
@@ -29,9 +32,12 @@ public class HMapEditor : MonoBehaviour {
 		
 	}
 
-	// void NewMap(int width, int height, float size, Texture2D textures) {
-
-	// }
+	void SetupMaterial(Texture2D texture, int tileColumns, int tileRows) {
+		textureMaterial = new Material(Shader.Find("Unlit/Texture"));
+		textureMaterial.SetTexture("_MainTex", texture);
+		tileUvSize.Set(1f / tileColumns, 1f / tileRows);
+		// Update all uvs here
+	}
 
 	void NewMap(int width, int height, float size, Material textureMaterial) {
 		tiles = new List<List<GameObject>>();
@@ -64,9 +70,9 @@ public class HMapEditor : MonoBehaviour {
 		};
 		Vector2[] uv = new Vector2[4] {
 			new Vector2(0f, 0f),
-			new Vector2(1f, 0f),
-			new Vector2(0f, 1f),
-			new Vector2(1f, 1f)
+			new Vector2(tileUvSize.x, 0f),
+			new Vector2(0f, tileUvSize.y),
+			new Vector2(tileUvSize.x, tileUvSize.y)
 		};
 
 		mesh.vertices = vertices;
