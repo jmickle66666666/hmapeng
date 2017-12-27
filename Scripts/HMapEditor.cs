@@ -90,6 +90,8 @@ public class HMapEditor : MonoBehaviour {
 		SetTileTextureAndRotation(6, 3, 14, 0);
 		SetTileTextureAndRotation(7, 3, 14, 0);
 
+		SetTileRectTextureIndex(5, 0, 3, 3, 2);
+
 	}
 	
 	// Update is called once per frame
@@ -220,6 +222,17 @@ public class HMapEditor : MonoBehaviour {
 		}
 		mesh.uv = newUV;
 		rotations[x][y] += rotation;
+	}
+
+	void FlipTexture(int x, int y) {
+		Mesh mesh = GetTileMesh(x, y);
+		Vector2[] uv = mesh.uv;
+		Vector2[] newUV = new Vector2[4];
+		newUV[0] = uv[1];
+		newUV[1] = uv[0];
+		newUV[2] = uv[3];
+		newUV[3] = uv[2];
+		mesh.uv = newUV;
 	}
 
 	// Macros
