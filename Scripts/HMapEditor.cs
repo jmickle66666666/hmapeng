@@ -91,7 +91,6 @@ public class HMapEditor : MonoBehaviour {
 		SetTileTextureAndRotation(7, 3, 14, 0);
 
 		SetTileRectTextureIndex(5, 0, 3, 3, 2);
-
 	}
 	
 	// Update is called once per frame
