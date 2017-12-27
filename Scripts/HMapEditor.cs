@@ -4,10 +4,6 @@ using UnityEngine;
 
 public class HMapEditor : MonoBehaviour {
 
-	public int nwidth;
-	public int nheight;
-	public float nsize;
-
 	public Texture2D texture;
 
 	Material textureMaterial;
@@ -16,10 +12,21 @@ public class HMapEditor : MonoBehaviour {
 	List<List<int>> rotations;
 	int textureColumns;
 
+	// Control stuff 
+
+	int selectedIdX = -1;
+	int selectedIdY = -1;
+	int currentTexture = 0;
+	List<string> tools = new List<string>() { "tile", "texture", "vertex" };
+	string currentTool = "tile";
+	UnityEngine.UI.Text toolText;
+
 	// Use this for initialization
 	void Start () {
+		toolText = GameObject.Find("ToolText").GetComponent<UnityEngine.UI.Text>();
+		UpdateToolText();
 		SetupMaterial(texture, 4, 4);
-		NewMap(nwidth, nheight, nsize, textureMaterial);
+		NewMap(8, 8, 1f, textureMaterial);
 		SetTileHeight(0, 0, 1f);
 		SetTileHeight(0, 1, 1f);
 		SetTileHeight(0, 2, 1f);
@@ -92,14 +99,69 @@ public class HMapEditor : MonoBehaviour {
 
 		SetTileRectTextureIndex(5, 0, 3, 3, 2);
 	}
-	
-	// Update is called once per frame
-	void Update () {
-		
+
+	// Control stuff
+
+	void UpdateToolText() {
+		toolText.text = "Current tool: "+currentTool;
 	}
 
+	public void SelectTile(int id) {
+		UnselectAll();
+		selectedIdX = id % tiles.Count;
+		selectedIdY = id / tiles[0].Count;
+	}
+
+	public void UnselectAll() {
+		selectedIdX = -1;
+		selectedIdY = -1;
+		for (int i = 0; i < tiles.Count; i++) {
+			for (int j = 0; j < tiles[0].Count; j++) {
+				tiles[i][j].GetComponent<TileSelector>().selected = false;
+			}
+		}
+	}
+
+	void Update () {
+		if (selectedIdX != -1) {
+			if (Input.GetKeyDown(KeyCode.C)) {
+				UnselectAll();
+			}
+
+			if (Input.GetKeyDown(KeyCode.R)) {
+				RotateTexture(selectedIdX, selectedIdY, Input.GetKey(KeyCode.LeftShift)?3:1);
+			}
+
+			if (Input.GetKeyDown(KeyCode.F)) {
+				FlipTexture(selectedIdX, selectedIdY);
+			}
+		}
+
+		if (Input.GetKeyDown(KeyCode.Q)) {
+			currentTool = tools[(tools.IndexOf(currentTool)+1)%tools.Count];
+			UpdateToolText();
+		}
+
+		Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+		RaycastHit hit;
+		if (Physics.Raycast(ray, out hit)) {
+			hit.collider.GetComponent<TileSelector>().Hover();
+		}
+
+		if (Input.GetMouseButtonDown(0)) {
+			ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+			if (Physics.Raycast(ray, out hit)) {
+				hit.collider.GetComponent<TileSelector>().Select();
+			} else {
+				UnselectAll();
+			}
+		}
+	}
+
+	// Setup
+
 	void SetupMaterial(Texture2D texture, int tileColumns, int tileRows) {
-		textureMaterial = new Material(Shader.Find("Unlit/Texture"));
+		textureMaterial = new Material(Shader.Find("Unlit/ColorTexture"));
 		textureMaterial.SetTexture("_MainTex", texture);
 		tileUvSize.Set(1f / tileColumns, 1f / tileRows);
 		textureColumns = tileColumns;
@@ -119,6 +181,8 @@ public class HMapEditor : MonoBehaviour {
 				GameObject newTile = CreateTile(new Vector3((i-(width/2)) * size, 0f, (j-(height/2)) * size), size, textureMaterial, mapPlane.transform);
 				tiles[i].Add(newTile);
 				rotations[i].Add(0);
+				TileSelector sel = newTile.AddComponent<TileSelector>();
+				sel.id = (j*width)+i;
 			}
 		}
 
@@ -157,8 +221,13 @@ public class HMapEditor : MonoBehaviour {
 		meshFilter.mesh = mesh;
 		if (textureMaterial != null) meshRenderer.material = textureMaterial;
 		mesh.RecalculateNormals();
+
+		newTile.AddComponent<MeshCollider>().sharedMesh = mesh;
+
 		return newTile;
 	}
+
+	// Tile modification
 
 	void SetTileHeight(int x, int y, float newHeight) {
 		SetVertexHeight(x, y, newHeight);
@@ -180,6 +249,7 @@ public class HMapEditor : MonoBehaviour {
 		vertices[vertex].y = newHeight;
 		mesh.vertices = vertices;
 		mesh.RecalculateNormals();
+		tile.GetComponent<MeshCollider>().sharedMesh = mesh;
 	}
 
 	Mesh GetTileMesh(int x, int y) {
@@ -196,7 +266,7 @@ public class HMapEditor : MonoBehaviour {
 			triangles = new int[6] { 0, 3, 2, 0, 2, 1 };
 		}
 		mesh.triangles = triangles;
-		mesh.RecalculateNormals();
+		UpdateTile(x, y);
 	}
 
 	void SetTileTextureIndex(int x, int y, int textureIndex) {
@@ -234,6 +304,12 @@ public class HMapEditor : MonoBehaviour {
 		mesh.uv = newUV;
 	}
 
+	void UpdateTile(int x, int y) {
+		GameObject tile = tiles[x][y];
+		tile.GetComponent<MeshFilter>().mesh.RecalculateNormals();
+		tile.GetComponent<MeshCollider>().sharedMesh = tile.GetComponent<MeshFilter>().mesh;
+	}
+
 	// Macros
 
 	void SetTileTextureAndRotation(int x, int y, int textureIndex, int rotation) {
@@ -256,4 +332,6 @@ public class HMapEditor : MonoBehaviour {
 			}
 		}
 	}
+
+
 }
