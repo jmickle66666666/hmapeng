@@ -6,25 +6,52 @@ public class HMapEditor : MonoBehaviour {
 
 	public Texture2D texture;
 
+	float tileSize;
 	Material textureMaterial;
 	Vector2 tileUvSize = new Vector2(1f, 1f);
 	List<List<GameObject>> tiles;
 	List<List<int>> rotations;
 	int textureColumns;
 
+	GameObject vertexMarker;
+	LineRenderer vertexLineRenderer;
+
 	// Control stuff 
 
 	int selectedIdX = -1;
 	int selectedIdY = -1;
+	int hightlightIdX = -1;
+	int hightlightIdY = -1;
 	int currentTexture = 0;
 	List<string> tools = new List<string>() { "tile", "texture", "vertex" };
 	string currentTool = "tile";
 	UnityEngine.UI.Text toolText;
 
+	// Vertex moving stuff
+
+	float vertexMoveStartHeight = 0f;
+	float vertexMoveStartDepth = 0f;
+	int vertexX = -1;
+	int vertexY = -1;
+	float[] tileHeights;
+
 	// Use this for initialization
 	void Start () {
 		toolText = GameObject.Find("ToolText").GetComponent<UnityEngine.UI.Text>();
 		UpdateToolText();
+
+		vertexMarker = new GameObject("VertexMarker");
+		vertexLineRenderer = vertexMarker.AddComponent<LineRenderer>();
+		vertexLineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+		vertexLineRenderer.SetPosition(0,new Vector3(0f, -1f, 0f));
+		vertexLineRenderer.SetPosition(1,new Vector3(0f, 1f, 0f));
+		vertexLineRenderer.startColor = new Color(0.8f, 0.4f, 0.2f, 1.0f);
+		vertexLineRenderer.endColor = new Color(0.8f, 0.4f, 0.2f, 1.0f);
+		vertexLineRenderer.enabled = false;
+		vertexLineRenderer.useWorldSpace = false;
+		vertexLineRenderer.startWidth = 0.1f;
+		vertexLineRenderer.endWidth = 0.1f;
+
 		SetupMaterial(texture, 4, 4);
 		NewMap(8, 8, 1f, textureMaterial);
 		SetTileHeight(0, 0, 1f);
@@ -112,6 +139,11 @@ public class HMapEditor : MonoBehaviour {
 		selectedIdY = id / tiles[0].Count;
 	}
 
+	public void HighlightTile(int id) {
+		hightlightIdX = id % tiles.Count;
+		hightlightIdY = id / tiles[0].Count;
+	}
+
 	public void UnselectAll() {
 		selectedIdX = -1;
 		selectedIdY = -1;
@@ -123,17 +155,33 @@ public class HMapEditor : MonoBehaviour {
 	}
 
 	void Update () {
+
+		vertexLineRenderer.enabled = (currentTool == "vertex");
+
 		if (selectedIdX != -1) {
+
+			if (currentTool != "tile") UnselectAll();
+
 			if (Input.GetKeyDown(KeyCode.C)) {
 				UnselectAll();
 			}
 
-			if (Input.GetKeyDown(KeyCode.R)) {
-				RotateTexture(selectedIdX, selectedIdY, Input.GetKey(KeyCode.LeftShift)?3:1);
+			if (currentTool == "texture") {
+
+				if (Input.GetKeyDown(KeyCode.R)) {
+					RotateTexture(selectedIdX, selectedIdY, Input.GetKey(KeyCode.LeftShift)?3:1);
+				}
+
+				if (Input.GetKeyDown(KeyCode.F)) {
+					FlipTexture(selectedIdX, selectedIdY);
+				}
+
 			}
 
-			if (Input.GetKeyDown(KeyCode.F)) {
-				FlipTexture(selectedIdX, selectedIdY);
+			if (currentTool == "tile") {
+				if (Input.GetKeyDown(KeyCode.F)) {
+					FlipTriangles(selectedIdX, selectedIdY);
+				}
 			}
 		}
 
@@ -145,15 +193,70 @@ public class HMapEditor : MonoBehaviour {
 		Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
 		RaycastHit hit;
 		if (Physics.Raycast(ray, out hit)) {
-			hit.collider.GetComponent<TileSelector>().Hover();
+
+			if (currentTool == "tile" || currentTool == "texture") {
+				hit.collider.GetComponent<TileSelector>().Hover();
+			}
+			
+			if (currentTool == "vertex") {
+				//vertexMoveStartDepth = hit.distance;
+				if (!Input.GetMouseButton(0)) {
+					vertexX = (int) Mathf.Round(hit.point.x / tileSize);
+					vertexY = (int) Mathf.Round(hit.point.z / tileSize);
+					vertexMarker.transform.position = new Vector3(vertexX * tileSize, GetHeightAt(vertexX, vertexY), vertexY * tileSize);
+				}
+			}
 		}
 
 		if (Input.GetMouseButtonDown(0)) {
-			ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-			if (Physics.Raycast(ray, out hit)) {
-				hit.collider.GetComponent<TileSelector>().Select();
-			} else {
-				UnselectAll();
+
+			if (currentTool == "vertex") {
+				vertexMoveStartHeight = GetHeightAt(vertexX, vertexY);
+				vertexMoveStartDepth = Camera.main.ScreenToViewportPoint(Input.mousePosition).y;
+			}
+
+			if (currentTool == "tile" || currentTool == "texture") {
+
+				ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+				if (Physics.Raycast(ray, out hit)) {
+					hit.collider.GetComponent<TileSelector>().Select();
+				} else {
+					UnselectAll();
+				}
+
+				if (selectedIdX != -1) {
+					vertexMoveStartDepth = Camera.main.ScreenToViewportPoint(Input.mousePosition).y;
+					tileHeights = new float[4] {
+						GetHeightAt(selectedIdX, selectedIdY),
+						GetHeightAt(selectedIdX + 1, selectedIdY),
+						GetHeightAt(selectedIdX, selectedIdY + 1),
+						GetHeightAt(selectedIdX + 1, selectedIdY + 1)
+					};
+					vertexMoveStartHeight = tileHeights[0];
+				}
+			}
+		}
+
+		if (Input.GetMouseButton(0)) {
+			if (currentTool == "vertex") {
+				Vector3 mouse = Camera.main.ScreenToViewportPoint(Input.mousePosition);
+				float newHeight = ((mouse.y-vertexMoveStartDepth) * 10f) + vertexMoveStartHeight;
+				newHeight = Mathf.Round(newHeight / 0.5f) * 0.5f;
+				vertexMarker.transform.position = new Vector3(vertexMarker.transform.position.x, newHeight, vertexMarker.transform.position.z);
+
+				SetVertexHeight(vertexX, vertexY, newHeight);
+			}
+
+			if (currentTool == "tile") {
+				if (selectedIdX != -1) {
+					Vector3 mouse = Camera.main.ScreenToViewportPoint(Input.mousePosition);
+					float hdiff = ((mouse.y-vertexMoveStartDepth) * 10f);
+					hdiff = Mathf.Round(hdiff / 0.5f) * 0.5f;
+					SetVertexHeight(selectedIdX, selectedIdY, hdiff + tileHeights[0]);
+					SetVertexHeight(selectedIdX + 1, selectedIdY, hdiff + tileHeights[1]);
+					SetVertexHeight(selectedIdX, selectedIdY + 1, hdiff + tileHeights[2]);
+					SetVertexHeight(selectedIdX + 1, selectedIdY + 1, hdiff + tileHeights[3]);
+				}
 			}
 		}
 	}
@@ -171,6 +274,7 @@ public class HMapEditor : MonoBehaviour {
 	void NewMap(int width, int height, float size, Material textureMaterial) {
 		tiles = new List<List<GameObject>>();
 		rotations = new List<List<int>>();
+		tileSize = size;
 
 		GameObject mapPlane = new GameObject("Map");
 
@@ -234,6 +338,28 @@ public class HMapEditor : MonoBehaviour {
 		SetVertexHeight(x+1, y, newHeight);
 		SetVertexHeight(x, y+1, newHeight);
 		SetVertexHeight(x+1, y+1, newHeight);
+	}
+
+	void ChangeTileHeight(int x, int y, float heightDiff) {
+		ChangeVertexHeight(x, y, heightDiff);
+		ChangeVertexHeight(x+1, y, heightDiff);
+		ChangeVertexHeight(x, y+1, heightDiff);
+		ChangeVertexHeight(x+1, y+1, heightDiff);
+	}
+
+	float GetHeightAt(int x, int y) {
+		if (x < tiles.Count && y < tiles.Count) { return GetVertexHeight(x, y, 0); }
+		else if (x == tiles.Count && y < tiles.Count) { return GetVertexHeight(x-1, y, 1); }
+		else if (x < tiles.Count && y == tiles.Count) { return GetVertexHeight(x, y-1, 3); }
+		else  { return GetVertexHeight(x-1, y-1, 2); }
+	}
+
+	void ChangeVertexHeight(int x, int y, float heightDiff) {
+		SetVertexHeight(x, y, GetHeightAt(x, y) + heightDiff);
+	}
+
+	float GetVertexHeight(int x, int y, int vertex) {
+		return GetTileMesh(x, y).vertices[vertex].y;
 	}
 
 	void SetVertexHeight(int x, int y, float newHeight) {

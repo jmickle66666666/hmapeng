@@ -31,6 +31,7 @@ public class TileSelector : MonoBehaviour {
 	}
 
 	public void Hover() {
+		maped.HighlightTile(id);
 		if (!selected) mat.SetColor("_Color", new Color(0.0f, 0.15f, 0.2f, 1.0f));
 	}
 }
