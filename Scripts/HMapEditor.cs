@@ -11,7 +11,9 @@ public class HMapEditor : MonoBehaviour {
 	Vector2 tileUvSize = new Vector2(1f, 1f);
 	List<List<GameObject>> tiles;
 	List<List<int>> rotations;
+	List<List<int>> tileTextureIndexes;
 	int textureColumns;
+	int textureRows;
 
 	GameObject vertexMarker;
 	LineRenderer vertexLineRenderer;
@@ -22,10 +24,11 @@ public class HMapEditor : MonoBehaviour {
 	int selectedIdY = -1;
 	int hightlightIdX = -1;
 	int hightlightIdY = -1;
-	int currentTexture = 0;
+	public int currentTexture = 0;
 	List<string> tools = new List<string>() { "tile", "texture", "vertex" };
 	string currentTool = "tile";
 	UnityEngine.UI.Text toolText;
+	UnityEngine.UI.RawImage texturePalette;
 
 	// Vertex moving stuff
 
@@ -39,6 +42,8 @@ public class HMapEditor : MonoBehaviour {
 	void Start () {
 		toolText = GameObject.Find("ToolText").GetComponent<UnityEngine.UI.Text>();
 		UpdateToolText();
+
+		texturePalette = GameObject.Find("Textures").GetComponent<UnityEngine.UI.RawImage>();
 
 		vertexMarker = new GameObject("VertexMarker");
 		vertexLineRenderer = vertexMarker.AddComponent<LineRenderer>();
@@ -158,24 +163,32 @@ public class HMapEditor : MonoBehaviour {
 
 		vertexLineRenderer.enabled = (currentTool == "vertex");
 
+		if (currentTool == "texture" && Input.GetKey(KeyCode.E)) {
+			texturePalette.enabled = true;
+		} else {
+			texturePalette.enabled = false;
+		}
+
+		if (hightlightIdX != -1) {
+			if (currentTool == "texture") {
+
+				if (Input.GetKeyDown(KeyCode.R)) {
+					RotateTexture(hightlightIdX, hightlightIdY, Input.GetKey(KeyCode.LeftShift)?3:1);
+				}
+
+				if (Input.GetKeyDown(KeyCode.F)) {
+					FlipTexture(hightlightIdX, hightlightIdY);
+				}
+
+			}
+		}
+
 		if (selectedIdX != -1) {
 
 			if (currentTool != "tile") UnselectAll();
 
 			if (Input.GetKeyDown(KeyCode.C)) {
 				UnselectAll();
-			}
-
-			if (currentTool == "texture") {
-
-				if (Input.GetKeyDown(KeyCode.R)) {
-					RotateTexture(selectedIdX, selectedIdY, Input.GetKey(KeyCode.LeftShift)?3:1);
-				}
-
-				if (Input.GetKeyDown(KeyCode.F)) {
-					FlipTexture(selectedIdX, selectedIdY);
-				}
-
 			}
 
 			if (currentTool == "tile") {
@@ -190,12 +203,17 @@ public class HMapEditor : MonoBehaviour {
 			UpdateToolText();
 		}
 
+
+		
+		hightlightIdX = -1;
 		Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
 		RaycastHit hit;
 		if (Physics.Raycast(ray, out hit)) {
 
 			if (currentTool == "tile" || currentTool == "texture") {
 				hit.collider.GetComponent<TileSelector>().Hover();
+				int id = hit.collider.GetComponent<TileSelector>().id;
+				HighlightTile(id);
 			}
 			
 			if (currentTool == "vertex") {
@@ -208,6 +226,12 @@ public class HMapEditor : MonoBehaviour {
 			}
 		}
 
+		if (Input.GetMouseButtonDown(1)) {
+			if (currentTool == "texture" && Input.GetKey(KeyCode.LeftControl)) {
+				currentTexture = GetTextureIndex(hightlightIdX, hightlightIdY);
+			}
+		}
+
 		if (Input.GetMouseButtonDown(0)) {
 
 			if (currentTool == "vertex") {
@@ -215,7 +239,7 @@ public class HMapEditor : MonoBehaviour {
 				vertexMoveStartDepth = Camera.main.ScreenToViewportPoint(Input.mousePosition).y;
 			}
 
-			if (currentTool == "tile" || currentTool == "texture") {
+			if (currentTool == "tile") {
 
 				ray = Camera.main.ScreenPointToRay(Input.mousePosition);
 				if (Physics.Raycast(ray, out hit)) {
@@ -233,6 +257,20 @@ public class HMapEditor : MonoBehaviour {
 						GetHeightAt(selectedIdX + 1, selectedIdY + 1)
 					};
 					vertexMoveStartHeight = tileHeights[0];
+				}
+			}
+
+			if (currentTool == "texture") {
+				if (!Input.GetKey(KeyCode.E)) {
+					SetTileTextureIndex(hightlightIdX, hightlightIdY, currentTexture);
+				} else {
+					
+					if (Input.mousePosition.x < 300f && Input.mousePosition.y > Screen.height-300f) {
+						float yp = (Screen.height - Input.mousePosition.y) * -1;
+						int x = (int) ((Input.mousePosition.x / 300f) / tileUvSize.x);
+						int y = (int) ((yp / 300f) / tileUvSize.y);
+						currentTexture = x + ((y+textureRows - 1) * textureColumns);
+					}
 				}
 			}
 		}
@@ -259,6 +297,7 @@ public class HMapEditor : MonoBehaviour {
 				}
 			}
 		}
+
 	}
 
 	// Setup
@@ -268,12 +307,13 @@ public class HMapEditor : MonoBehaviour {
 		textureMaterial.SetTexture("_MainTex", texture);
 		tileUvSize.Set(1f / tileColumns, 1f / tileRows);
 		textureColumns = tileColumns;
-		// Update all uvs here
+		textureRows = tileRows;
 	}
 
 	void NewMap(int width, int height, float size, Material textureMaterial) {
 		tiles = new List<List<GameObject>>();
 		rotations = new List<List<int>>();
+		tileTextureIndexes = new List<List<int>>();
 		tileSize = size;
 
 		GameObject mapPlane = new GameObject("Map");
@@ -281,10 +321,12 @@ public class HMapEditor : MonoBehaviour {
 		for (int i = 0; i < width; i++) {
 			tiles.Add(new List<GameObject>());
 			rotations.Add(new List<int>());
+			tileTextureIndexes.Add(new List<int>());
 			for (int j = 0; j < height; j++) {
 				GameObject newTile = CreateTile(new Vector3((i-(width/2)) * size, 0f, (j-(height/2)) * size), size, textureMaterial, mapPlane.transform);
 				tiles[i].Add(newTile);
 				rotations[i].Add(0);
+				tileTextureIndexes[i].Add(0);
 				TileSelector sel = newTile.AddComponent<TileSelector>();
 				sel.id = (j*width)+i;
 			}
@@ -362,6 +404,10 @@ public class HMapEditor : MonoBehaviour {
 		return GetTileMesh(x, y).vertices[vertex].y;
 	}
 
+	int GetTextureIndex(int x, int y) {
+		return tileTextureIndexes[x][y];
+	}
+
 	void SetVertexHeight(int x, int y, float newHeight) {
 		if (x < tiles.Count && y < tiles[0].Count) 	{ SetTileVertexHeight(tiles[x]	[y],	0, newHeight); }
 		if (x > 0 			&& y < tiles[0].Count) 	{ SetTileVertexHeight(tiles[x-1][y],	1, newHeight); }
@@ -396,6 +442,7 @@ public class HMapEditor : MonoBehaviour {
 	}
 
 	void SetTileTextureIndex(int x, int y, int textureIndex) {
+		tileTextureIndexes[x][y] = textureIndex;
 		Mesh mesh = GetTileMesh(x, y);
 		Vector2 baseUV = new Vector2((textureIndex % textureColumns) * tileUvSize.x, (textureIndex / textureColumns) * tileUvSize.y);
 		Vector2[] uv = new Vector2[4] {
